@@ -64,6 +64,12 @@ enum BarCapShape {
   square,
 }
 
+enum TimeLabelOption {
+  showProgress,
+  showTotal,
+  showBoth,
+}
+
 /// A progress bar widget to show or set the location of the currently
 /// playing audio or video content.
 ///
@@ -91,6 +97,7 @@ class ProgressBar extends LeafRenderObjectWidget {
     this.progressBarColor,
     this.bufferedBarColor,
     this.barCapShape = BarCapShape.round,
+    this.timeLabelOption = TimeLabelOption.showBoth,
     this.thumbRadius = 10.0,
     this.thumbColor,
     this.thumbGlowColor,
@@ -115,6 +122,8 @@ class ProgressBar extends LeafRenderObjectWidget {
   /// This is useful for streamed content. If you are playing a local file
   /// then you can leave this out.
   final Duration? buffered;
+
+  final TimeLabelOption? timeLabelOption;
 
   /// A callback when user moves the thumb.
   ///
@@ -282,6 +291,7 @@ class ProgressBar extends LeafRenderObjectWidget {
       thumbGlowRadius: thumbGlowRadius,
       thumbCanPaintOutsideBar: thumbCanPaintOutsideBar,
       timeLabelLocation: timeLabelLocation ?? TimeLabelLocation.below,
+      timeLabelOption: timeLabelOption ?? TimeLabelOption.showBoth,
       timeLabelType: timeLabelType ?? TimeLabelType.totalTime,
       timeLabelTextStyle: textStyle,
       timeLabelPadding: timeLabelPadding,
@@ -430,6 +440,7 @@ class _RenderProgressBar extends RenderBox {
     double thumbGlowRadius = 30.0,
     bool thumbCanPaintOutsideBar = true,
     required TimeLabelLocation timeLabelLocation,
+    required TimeLabelOption timeLabelOption,
     required TimeLabelType timeLabelType,
     TextStyle? timeLabelTextStyle,
     double timeLabelPadding = 0.0,
@@ -451,6 +462,7 @@ class _RenderProgressBar extends RenderBox {
         _thumbGlowRadius = thumbGlowRadius,
         _thumbCanPaintOutsideBar = thumbCanPaintOutsideBar,
         _timeLabelLocation = timeLabelLocation,
+        _timeLabelOption = timeLabelOption,
         _timeLabelType = timeLabelType,
         _timeLabelTextStyle = timeLabelTextStyle,
         _timeLabelPadding = timeLabelPadding,
@@ -796,6 +808,14 @@ class _RenderProgressBar extends RenderBox {
     markNeedsLayout();
   }
 
+  TimeLabelOption get timeLabelOption => _timeLabelOption;
+  TimeLabelOption _timeLabelOption;
+  set timeLabelOption(TimeLabelOption value) {
+    if (_timeLabelOption == value) return;
+    _timeLabelOption = value;
+    markNeedsLayout();
+  }
+
   /// What to display for the time label on the right
   ///
   /// The right time label can show the total time or the remaining time as a
@@ -955,14 +975,19 @@ class _RenderProgressBar extends RenderBox {
 
     // current time label
     final labelDy = (isLabelBelow) ? barHeight + _timeLabelPadding : 0.0;
-    final leftLabelOffset = Offset(0, labelDy);
-    _leftTimeLabel().paint(canvas, leftLabelOffset);
+    if (timeLabelOption == TimeLabelOption.showBoth ||
+        timeLabelOption == TimeLabelOption.showProgress) {
+      final leftLabelOffset = Offset(0, labelDy);
+      _leftTimeLabel().paint(canvas, leftLabelOffset);
+    }
 
     // total or remaining time label
-    final rightLabelDx = size.width - _rightLabelSize.width;
-    final rightLabelOffset = Offset(rightLabelDx, labelDy);
-    _rightTimeLabel().paint(canvas, rightLabelOffset);
-
+    if (timeLabelOption == TimeLabelOption.showBoth ||
+        timeLabelOption == TimeLabelOption.showTotal) {
+      final rightLabelDx = size.width - _rightLabelSize.width;
+      final rightLabelOffset = Offset(rightLabelDx, labelDy);
+      _rightTimeLabel().paint(canvas, rightLabelOffset);
+    }
     // progress bar
     final barDy =
         (isLabelBelow) ? 0.0 : _leftLabelSize.height + _timeLabelPadding;
@@ -975,28 +1000,42 @@ class _RenderProgressBar extends RenderBox {
   ///
   void _drawProgressBarWithLabelsOnSides(Canvas canvas) {
     // left time label
-    final leftLabelSize = _leftLabelSize;
+    final showLeftTimeLabel = timeLabelOption == TimeLabelOption.showBoth ||
+        timeLabelOption == TimeLabelOption.showProgress;
+    final initLeftLabelSize = _leftLabelSize;
+    final leftLabelSize = Size(showLeftTimeLabel ? initLeftLabelSize.width : 0,
+        initLeftLabelSize.height);
     final verticalOffset = size.height / 2 - leftLabelSize.height / 2;
-    final leftLabelOffset = Offset(0, verticalOffset);
-    _leftTimeLabel().paint(canvas, leftLabelOffset);
+
+    if (showLeftTimeLabel) {
+      final leftLabelOffset = Offset(0, verticalOffset);
+      _leftTimeLabel().paint(canvas, leftLabelOffset);
+    }
 
     // right time label
+    final showRightTimeLabel = timeLabelOption == TimeLabelOption.showBoth ||
+        timeLabelOption == TimeLabelOption.showTotal;
     final rightLabelSize = _rightLabelSize;
-    final rightLabelWidth = rightLabelSize.width;
-    final totalLabelDx = size.width - rightLabelWidth;
-    final totalLabelOffset = Offset(totalLabelDx, verticalOffset);
-    _rightTimeLabel().paint(canvas, totalLabelOffset);
+    final rightLabelWidth = showRightTimeLabel ? rightLabelSize.width : 0;
+    if (showRightTimeLabel) {
+      final totalLabelDx = size.width - rightLabelWidth;
+      final totalLabelOffset = Offset(totalLabelDx, verticalOffset);
+      _rightTimeLabel().paint(canvas, totalLabelOffset);
+    }
 
     // progress bar
     final leftLabelWidth = leftLabelSize.width;
     final barHeight = _heightWhenNoLabels();
     final barWidth = size.width -
         2 * _defaultSidePadding -
-        2 * _timeLabelPadding -
+        (timeLabelOption == TimeLabelOption.showBoth ? _timeLabelPadding : 0) -
+        _timeLabelPadding -
         leftLabelWidth -
         rightLabelWidth;
     final barDy = size.height / 2 - barHeight / 2;
-    final barDx = leftLabelWidth + _defaultSidePadding + _timeLabelPadding;
+    final barDx = leftLabelWidth +
+        _defaultSidePadding +
+        (timeLabelOption != TimeLabelOption.showTotal ? _timeLabelPadding : 0);
     _drawProgressBar(canvas, Offset(barDx, barDy), Size(barWidth, barHeight));
   }
 
@@ -1011,15 +1050,21 @@ class _RenderProgressBar extends RenderBox {
     // left time label
     final leftLabelSize = _leftLabelSize;
     final verticalOffset = size.height / 2 - leftLabelSize.height / 2;
-    final leftLabelOffset = Offset(_timeLabelPadding, verticalOffset);
-    _leftTimeLabel().paint(canvas, leftLabelOffset);
+    if (timeLabelOption == TimeLabelOption.showBoth ||
+        timeLabelOption == TimeLabelOption.showProgress) {
+      final leftLabelOffset = Offset(_timeLabelPadding, verticalOffset);
+      _leftTimeLabel().paint(canvas, leftLabelOffset);
+    }
 
     // right time label
-    final rightLabelSize = _rightLabelSize;
-    final rightLabelWidth = rightLabelSize.width;
-    final totalLabelDx = size.width - rightLabelWidth - _timeLabelPadding;
-    final totalLabelOffset = Offset(totalLabelDx, verticalOffset);
-    _rightTimeLabel().paint(canvas, totalLabelOffset);
+    if (timeLabelOption == TimeLabelOption.showBoth ||
+        timeLabelOption == TimeLabelOption.showTotal) {
+      final rightLabelSize = _rightLabelSize;
+      final rightLabelWidth = rightLabelSize.width;
+      final totalLabelDx = size.width - rightLabelWidth - _timeLabelPadding;
+      final totalLabelOffset = Offset(totalLabelDx, verticalOffset);
+      _rightTimeLabel().paint(canvas, totalLabelOffset);
+    }
   }
 
   /// Draw the progress bar without labels like this:
